@@ -14,6 +14,7 @@ import { type RoomColors, buildRoom, villagerRoomColors } from './interiorScener
 import { type HouseSite, IslandMap, type Point, atDoorway, houseDoor } from './map';
 import { type Villager, conversation, dayPart } from './npcs';
 import { buildEmptyLot, buildHouse, buildScenery } from './scenery';
+import { Wanderer, slideMove } from './steering';
 
 /** Characters are built about 2 units tall; the island uses 1-unit tiles. */
 const ACTOR_SCALE = 0.6;
@@ -56,8 +57,7 @@ interface Actor {
 interface Npc extends Actor {
   villager: Villager;
   house: HouseSite;
-  target: Point | null;
-  waitLeft: number;
+  wander: Wanderer;
   talking: boolean;
 }
 
@@ -196,8 +196,7 @@ export class World {
         ...makeActor(villager.appearance, ISLAND, this.besideDoor(house.site)),
         villager,
         house: house.site,
-        target: null,
-        waitLeft: Math.random() * 3,
+        wander: new Wanderer(),
         talking: false,
       };
       this.scene.add(npc.animator.rig.root);
@@ -439,7 +438,7 @@ export class World {
       p.speed = 0;
       if (action && !this.hud.advanceDialogue()) {
         this.talkingTo.talking = false;
-        this.talkingTo.waitLeft = 2;
+        this.talkingTo.wander.rest(2);
         this.talkingTo = null;
       }
       return;
@@ -546,9 +545,8 @@ export class World {
     npc.x = at.x;
     npc.z = at.z;
     npc.heading = heading;
-    npc.target = null;
     npc.speed = 0;
-    npc.waitLeft = 2 + Math.random() * 2;
+    npc.wander.rest(2 + Math.random() * 2);
   }
 
   /** Fades out, runs the change, snaps the camera, and fades back in. */
@@ -578,7 +576,7 @@ export class World {
   private startTalking(npc: Npc): void {
     this.talkingTo = npc;
     npc.talking = true;
-    npc.target = null;
+    npc.wander.rest(2);
     npc.speed = 0;
     this.player.speed = 0;
     this.player.heading = Math.atan2(npc.x - this.player.x, npc.z - this.player.z);
@@ -598,55 +596,29 @@ export class World {
       return;
     }
 
-    if (!npc.target) {
-      npc.speed = 0;
-      npc.waitLeft -= dt;
-      if (npc.waitLeft <= 0) npc.target = this.pickWanderTarget(npc);
-      return;
-    }
-
-    const dx = npc.target.x - npc.x;
-    const dz = npc.target.z - npc.z;
-    const dist = Math.hypot(dx, dz);
-    const step = Math.min(dist, NPC_SPEED * dt);
-    npc.heading = turnToward(npc.heading, Math.atan2(dx, dz), dt * 8);
-    const moved = dist > 0.05 && this.moveActor(npc, (dx / dist) * step, (dz / dist) * step);
-    npc.speed = moved ? NPC_SPEED : 0;
-    if (!moved || dist < 0.1) {
-      npc.target = null;
-      npc.waitLeft = 1.5 + Math.random() * 4;
-    }
-  }
-
-  private pickWanderTarget(npc: Npc): Point | null {
     const outside = npc.area === ISLAND;
-    const home = outside ? this.besideDoor(npc.house) : this.houses.get(npc.area)!.room.ownerSpot;
-    const radius = outside ? NPC_WANDER_RADIUS.island : NPC_WANDER_RADIUS.room;
     const area = this.areaOf(npc);
-    for (let i = 0; i < 10; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const r = Math.random() * radius;
-      const x = home.x + Math.cos(angle) * r;
-      const z = home.z + Math.sin(angle) * r;
-      if (area.canStand(x, z, ACTOR_RADIUS) && !(outside && this.nearAnyDoor(x, z))) return { x, z };
-    }
-    npc.waitLeft = 1;
-    return null;
+    const { moved, facing } = npc.wander.update(npc, dt, {
+      standable: (x, z) => area.canStand(x, z, ACTOR_RADIUS),
+      free: (x, z) => this.canStand(npc, x, z),
+      randomSpot: () => {
+        const home = outside ? this.besideDoor(npc.house) : this.houses.get(npc.area)!.room.ownerSpot;
+        const radius = outside ? NPC_WANDER_RADIUS.island : NPC_WANDER_RADIUS.room;
+        const angle = Math.random() * Math.PI * 2;
+        const r = Math.random() * radius;
+        return { x: home.x + Math.cos(angle) * r, z: home.z + Math.sin(angle) * r };
+      },
+      allowed: (p) => !(outside && this.nearAnyDoor(p.x, p.z)),
+      speed: NPC_SPEED,
+    });
+    // Legs move only as fast as the villager actually travels.
+    npc.speed = dt > 0 ? moved / dt : 0;
+    if (facing !== null) npc.heading = turnToward(npc.heading, facing, dt * 8);
   }
 
   /** Moves an actor, sliding along walls. Returns true if it moved at all. */
   private moveActor(actor: Actor, dx: number, dz: number): boolean {
-    const free = (x: number, z: number) => this.canStand(actor, x, z);
-    if (free(actor.x + dx, actor.z + dz)) {
-      actor.x += dx;
-      actor.z += dz;
-    } else if (dx !== 0 && free(actor.x + dx, actor.z)) {
-      actor.x += dx;
-    } else if (dz !== 0 && free(actor.x, actor.z + dz)) {
-      actor.z += dz;
-    } else {
-      return false;
-    }
+    if (slideMove(actor, dx, dz, (x, z) => this.canStand(actor, x, z)) === 0) return false;
     if (actor === this.player) this.dirty = true;
     return true;
   }

@@ -1,7 +1,7 @@
 import './style.css';
 import type { Character } from './character/model';
 import { Stage } from './scene/stage';
-import { HttpCharacterRepository, HttpWorldStateRepository } from './storage/httpRepositories';
+import { HttpCharacterRepository, HttpHomeRepository, HttpWorldStateRepository } from './storage/httpRepositories';
 import { migrateBrowserData } from './storage/migrate';
 import { CharacterCreator } from './ui/creator';
 import { VILLAGERS } from './world/npcs';
@@ -11,6 +11,7 @@ const creatorView = document.getElementById('creator')!;
 const worldView = document.getElementById('world')!;
 const characters = new HttpCharacterRepository();
 const worldState = new HttpWorldStateRepository();
+const homes = new HttpHomeRepository();
 const stage = new Stage(document.getElementById('stage')!);
 let world: World | null = null;
 
@@ -27,6 +28,8 @@ async function showWorld(character: Character): Promise<void> {
     character,
     villagers: VILLAGERS,
     stateRepo: worldState,
+    homeRepo: homes,
+    characterRepo: characters,
     onEditCharacter: () => void showCreator(character),
   });
 }

@@ -1,4 +1,6 @@
 import { type Character, normalizeCharacter } from '../character/model';
+import { type Home, normalizeHome } from '../home/home';
+import type { HomeRepository } from './homeRepository';
 import { ACTIVE_KEY, type CharacterRepository } from './characterRepository';
 import type { KeyValueStore } from './keyValue';
 import { type PlayerState, type WorldStateRepository, normalizePlayerState } from './worldStateRepository';
@@ -94,5 +96,24 @@ export class HttpWorldStateRepository implements WorldStateRepository {
 
   async setPlayerState(characterId: string, state: PlayerState): Promise<void> {
     await request(this.fetchFn, 'PUT', `${characterPath(characterId)}/state`, state);
+  }
+}
+
+export class HttpHomeRepository implements HomeRepository {
+  constructor(private readonly fetchFn: Fetch = (...args) => fetch(...args)) {}
+
+  async list(): Promise<Home[]> {
+    const res = await request(this.fetchFn, 'GET', '/api/homes');
+    const raw = (await res?.json()) as unknown;
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((h): h is Home => !!h && typeof h.characterId === 'string' && Number.isInteger(h.plot))
+      .map((h) => normalizeHome(h, h.characterId, h.plot));
+  }
+
+  async save(home: Home): Promise<Home> {
+    const res = await request(this.fetchFn, 'PUT', `/api/homes/${encodeURIComponent(home.characterId)}`, home);
+    const saved = (await res!.json()) as Home;
+    return normalizeHome(saved, home.characterId, saved.plot);
   }
 }

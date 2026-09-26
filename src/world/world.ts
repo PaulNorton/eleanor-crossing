@@ -2,14 +2,18 @@ import * as THREE from 'three';
 import { CharacterAnimator } from '../character/animator';
 import { buildCharacter } from '../character/build';
 import type { Appearance, Character } from '../character/model';
+import type { Home } from '../home/home';
+import type { CharacterRepository } from '../storage/characterRepository';
+import type { HomeRepository } from '../storage/homeRepository';
 import type { PlayerState, WorldStateRepository } from '../storage/worldStateRepository';
+import { HomeEditor } from './homeEditor';
 import { Hud } from './hud';
 import { Input } from './input';
 import { Room } from './interior';
-import { buildRoom, roomColors } from './interiorScenery';
+import { type RoomColors, buildRoom, villagerRoomColors } from './interiorScenery';
 import { type HouseSite, IslandMap, type Point, houseDoor } from './map';
 import { type Villager, conversation, dayPart } from './npcs';
-import { buildScenery } from './scenery';
+import { buildEmptyLot, buildHouse, buildScenery } from './scenery';
 
 /** Characters are built about 2 units tall; the island uses 1-unit tiles. */
 const ACTOR_SCALE = 0.6;
@@ -23,12 +27,18 @@ const TALK_DISTANCE = 1.6;
 const DOOR_PROMPT_DISTANCE = 1.3;
 const CAMERA_OFFSET = new THREE.Vector3(0, 6, 7.5);
 const SAVE_EVERY_SECONDS = 3;
+const HOME_SAVE_DELAY_MS = 500;
+const EMPTY_LOT_COLOR = '#c9a66b';
 /** Heading that faces the camera (+z); its opposite faces into the screen. */
 const FACE_CAMERA = 0;
 const FACE_AWAY = Math.PI;
 
-/** The island is one area; each house interior is another, keyed by its owner's id. */
+/**
+ * The island is one area; each house interior is another. Villager houses
+ * are keyed by the villager's id, player houses by `home-<characterId>`.
+ */
 const ISLAND = 'island';
+const homeKey = (characterId: string) => `home-${characterId}`;
 
 interface Area {
   canStand(x: number, z: number, radius: number): boolean;
@@ -52,10 +62,22 @@ interface Npc extends Actor {
 }
 
 interface House {
+  key: string;
   site: HouseSite;
-  owner: Villager;
+  /** Whose house it is, for the door label. */
+  name: string;
+  villager?: Villager;
+  home?: Home;
   room: Room;
   group: THREE.Group;
+  pieces: THREE.Group[];
+  /** A player house as seen on the island. Rebuilt when its colors change. */
+  outside?: THREE.Group;
+}
+
+function homeRoomColors(home: Home): RoomColors {
+  const i = home.interior;
+  return { accent: home.exterior.roof, wall: i.wallpaper, floor: i.floorColor, floorStyle: i.floorStyle };
 }
 
 function makeActor(appearance: Appearance, area: string, at: Point, heading = 0): Actor {
@@ -82,6 +104,8 @@ export interface WorldOptions {
   character: Character;
   villagers: readonly Villager[];
   stateRepo: WorldStateRepository;
+  homeRepo: HomeRepository;
+  characterRepo: CharacterRepository;
   onEditCharacter: () => void;
 }
 
@@ -101,6 +125,9 @@ export class World {
   private readonly player: Actor;
   private readonly npcs: Npc[];
   private readonly resizeObserver: ResizeObserver;
+  private readonly editor: HomeEditor;
+  private homeSaveTimer: number | undefined;
+  private pendingHome: Home | null = null;
   private talkingTo: Npc | null = null;
   /** True while the screen fades between areas. Input is ignored. */
   private transitioning = false;
@@ -113,15 +140,20 @@ export class World {
     private readonly opts: WorldOptions,
     map: IslandMap,
     start: PlayerState,
+    homes: Home[],
+    names: Map<string, string>,
   ) {
     const { container, villagers } = opts;
     this.map = map;
-    for (const owner of villagers) {
-      const site = map.houses.find((h) => h.owner === owner.id)!;
-      const room = new Room(owner.personality);
-      const group = buildRoom(room, roomColors(owner.color));
-      group.visible = false;
-      this.houses.set(owner.id, { site, owner, room, group });
+    for (const villager of villagers) {
+      const site = map.houses.find((h) => h.owner === villager.id)!;
+      this.addHouse({ key: villager.id, site, name: villager.name, villager, room: Room.forPersonality(villager.personality) });
+    }
+    for (const home of homes) {
+      const site = map.plots[home.plot];
+      if (!site) continue;
+      const name = names.get(home.characterId) ?? 'Someone';
+      this.addHouse({ key: homeKey(home.characterId), site, name, home, room: new Room(home.interior.furniture) });
     }
 
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -129,12 +161,19 @@ export class World {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.append(this.renderer.domElement);
 
-    const houseColors = new Map(villagers.map((v) => [v.id, v.color]));
-    this.hud = new Hud(this.map, houseColors);
+    this.hud = new Hud(this.map, this.minimapColors());
     container.append(this.hud.root);
     this.hud.setPlayer(opts.character.name);
     this.hud.editButton.addEventListener('click', () => opts.onEditCharacter());
+    this.hud.decorateButton.addEventListener('click', () => this.startDecorating());
     this.input = new Input(this.hud.joystick, this.hud.knob, this.hud.actionButton);
+    this.editor = new HomeEditor({
+      camera: this.camera,
+      canvas: this.renderer.domElement,
+      apply: (home) => this.applyHome(home),
+      closed: () => this.stopDecorating(),
+    });
+    this.hud.root.append(this.editor.panel.root);
 
     this.scene.add(this.ambient, this.sun, this.sun.target);
     this.sun.castShadow = true;
@@ -143,7 +182,11 @@ export class World {
     this.sun.shadow.bias = -0.0008;
     this.islandGroup = buildScenery(this.map, villagers.map((v) => ({ owner: v.id, roofColor: v.color })));
     this.scene.add(this.islandGroup);
-    for (const house of this.houses.values()) this.scene.add(house.group);
+    for (const site of map.plots) {
+      const house = [...this.houses.values()].find((h) => h.site === site);
+      if (house) this.buildOutside(house);
+      else this.islandGroup.add(buildEmptyLot(site));
+    }
 
     this.player = makeActor(opts.character.appearance, start.inside ?? ISLAND, start, start.heading);
     this.scene.add(this.player.animator.rig.root);
@@ -160,8 +203,9 @@ export class World {
       this.scene.add(npc.animator.rig.root);
       return npc;
     });
-    // If we start inside someone's house, they are home.
-    if (start.inside) this.bringOwnerInside(this.houses.get(start.inside)!);
+    // If we start inside a villager's house, they are home.
+    const startHouse = start.inside ? this.houses.get(start.inside) : undefined;
+    if (startHouse?.villager) this.bringOwnerInside(startHouse);
     this.updateVisibility();
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -174,30 +218,143 @@ export class World {
     this.renderer.setAnimationLoop((time) => this.frame(time));
   }
 
-  /** Loads the player's last position (or the plaza spawn) and starts the game loop. */
+  /** Loads the player's last position (or the plaza spawn) and every house, then starts the game loop. */
   static async create(opts: WorldOptions): Promise<World> {
     const map = new IslandMap(opts.villagers.map((v) => ({ owner: v.id })));
-    const saved = await opts.stateRepo.getPlayerState(opts.character.id).catch((err: unknown) => {
-      console.warn('Could not load the saved position; starting at the plaza.', err);
+    const warn = (what: string) => (err: unknown) => {
+      console.warn(`Could not load ${what}.`, err);
       return null;
-    });
-    return new World(opts, map, World.validStart(opts.villagers, map, saved));
+    };
+    const [saved, homes, residents] = await Promise.all([
+      opts.stateRepo.getPlayerState(opts.character.id).catch(warn('the saved position')),
+      opts.homeRepo.list().catch(warn('houses')),
+      opts.characterRepo.list().catch(warn('residents')),
+    ]);
+    const names = new Map((residents ?? []).map((c) => [c.id, c.name]));
+    names.set(opts.character.id, opts.character.name);
+    const roomFor = (key: string): Room | null => {
+      const villager = opts.villagers.find((v) => v.id === key);
+      if (villager) return Room.forPersonality(villager.personality);
+      const home = homes?.find((h) => homeKey(h.characterId) === key);
+      return home ? new Room(home.interior.furniture) : null;
+    };
+    return new World(opts, map, World.validStart(map, roomFor, saved), homes ?? [], names);
   }
 
   /** The saved position if it is still a valid place to stand, otherwise the plaza. */
-  private static validStart(villagers: readonly Villager[], map: IslandMap, saved: PlayerState | null): PlayerState {
+  private static validStart(map: IslandMap, roomFor: (key: string) => Room | null, saved: PlayerState | null): PlayerState {
     const plaza = { ...map.spawn, heading: FACE_CAMERA };
     if (!saved) return plaza;
     if (saved.inside) {
-      const owner = villagers.find((v) => v.id === saved.inside);
-      return owner && new Room(owner.personality).canStand(saved.x, saved.z, ACTOR_RADIUS) ? saved : plaza;
+      const room = roomFor(saved.inside);
+      if (!room) return plaza;
+      return room.canStand(saved.x, saved.z, ACTOR_RADIUS) ? saved : { ...room.entrance, heading: FACE_AWAY, inside: saved.inside };
     }
     return map.canStand(saved.x, saved.z, ACTOR_RADIUS) ? saved : plaza;
+  }
+
+  private addHouse(house: Omit<House, 'group' | 'pieces'>): void {
+    const full = house as House;
+    full.group = new THREE.Group();
+    full.pieces = [];
+    this.houses.set(house.key, full);
+    this.buildInside(full);
+  }
+
+  /** (Re)builds a house's room from its current furniture and colors. */
+  private buildInside(house: House): void {
+    const old = house.group;
+    const colors = house.home ? homeRoomColors(house.home) : villagerRoomColors(house.villager!.color);
+    const { group, pieces } = buildRoom(house.room, colors);
+    group.visible = old.visible;
+    old.removeFromParent();
+    disposeTree(old);
+    house.group = group;
+    house.pieces = pieces;
+    this.scene.add(group);
+  }
+
+  /** (Re)builds a player house on the island in its chosen colors. */
+  private buildOutside(house: House): void {
+    if (house.outside) {
+      house.outside.removeFromParent();
+      disposeTree(house.outside);
+    }
+    house.outside = buildHouse(house.site, house.home!.exterior);
+    this.islandGroup.add(house.outside);
+  }
+
+  /** Colors for houses on the minimap, keyed by site owner. */
+  private minimapColors(): Map<string, string> {
+    const colors = new Map<string, string>(this.map.plots.map((p) => [p.owner, EMPTY_LOT_COLOR]));
+    for (const house of this.houses.values()) {
+      colors.set(house.site.owner, house.villager?.color ?? house.home!.exterior.roof);
+    }
+    return colors;
+  }
+
+  // ---------- Decorating ----------
+
+  private get ownHouse(): House | undefined {
+    return this.houses.get(homeKey(this.opts.character.id));
+  }
+
+  private startDecorating(): void {
+    const house = this.ownHouse;
+    if (!house || this.player.area !== house.key || this.editor.isOpen) return;
+    this.hud.root.classList.add('decorating');
+    this.hud.showPrompt('', null);
+    this.editor.open({ home: house.home!, group: house.group, pieces: house.pieces });
+    this.updateVisibility();
+  }
+
+  private stopDecorating(): void {
+    this.hud.root.classList.remove('decorating');
+    // New furniture might sit where the player was standing.
+    const house = this.ownHouse!;
+    if (!house.room.canStand(this.player.x, this.player.z, ACTOR_RADIUS)) {
+      this.player.x = house.room.entrance.x;
+      this.player.z = house.room.entrance.z;
+      this.dirty = true;
+    }
+    this.flushHomeSave();
+    this.updateVisibility();
+  }
+
+  /** The editor changed the house: rebuild it and save soon. */
+  private applyHome(home: Home): void {
+    const house = this.ownHouse!;
+    const outsideChanged = JSON.stringify(home.exterior) !== JSON.stringify(house.home!.exterior);
+    house.home = home;
+    house.room = new Room(home.interior.furniture);
+    this.buildInside(house);
+    if (outsideChanged) {
+      this.buildOutside(house);
+      this.hud.setHouseColors(this.map, this.minimapColors());
+    }
+    this.editor.roomRebuilt({ home, group: house.group, pieces: house.pieces });
+    this.pendingHome = home;
+    window.clearTimeout(this.homeSaveTimer);
+    this.homeSaveTimer = window.setTimeout(() => this.flushHomeSave(), HOME_SAVE_DELAY_MS);
+  }
+
+  private flushHomeSave(): void {
+    window.clearTimeout(this.homeSaveTimer);
+    const home = this.pendingHome;
+    if (!home) return;
+    this.pendingHome = null;
+    this.opts.homeRepo.save(home).catch((err: unknown) => {
+      console.warn('Could not save the house.', err);
+      this.editor.panel.setHint('Could not save. Check the connection; changes will retry.');
+      this.pendingHome ??= home;
+    });
   }
 
   async dispose(): Promise<void> {
     this.renderer.setAnimationLoop(null);
     window.removeEventListener('pagehide', this.saveOnHide);
+    if (this.editor.isOpen) this.editor.close();
+    this.flushHomeSave();
     this.resizeObserver.disconnect();
     this.input.dispose();
     await this.savePosition();
@@ -273,7 +430,7 @@ export class World {
   private updatePlayer(dt: number): void {
     const p = this.player;
     const action = this.input.consumeAction();
-    if (this.transitioning) {
+    if (this.transitioning || this.editor.isOpen) {
       p.speed = 0;
       return;
     }
@@ -344,11 +501,11 @@ export class World {
   private async enterHouse(house: House): Promise<void> {
     await this.transition(() => {
       const p = this.player;
-      p.area = house.owner.id;
+      p.area = house.key;
       p.x = house.room.entrance.x;
       p.z = house.room.entrance.z;
       p.heading = FACE_AWAY;
-      this.bringOwnerInside(house);
+      if (house.villager) this.bringOwnerInside(house);
     });
   }
 
@@ -360,9 +517,9 @@ export class World {
       p.x = door.x;
       p.z = door.z;
       p.heading = FACE_CAMERA;
-      // The owner follows you out, stepping to one side of the path.
-      const owner = this.npcs.find((n) => n.villager.id === house.owner.id)!;
-      if (owner.area === house.owner.id) this.placeNpc(owner, ISLAND, this.besideDoor(house.site), FACE_CAMERA);
+      // A villager follows you out, stepping to one side of the path.
+      const owner = this.npcs.find((n) => n.villager === house.villager);
+      if (owner?.area === house.key) this.placeNpc(owner, ISLAND, this.besideDoor(house.site), FACE_CAMERA);
     });
   }
 
@@ -383,8 +540,8 @@ export class World {
   }
 
   private bringOwnerInside(house: House): void {
-    const owner = this.npcs.find((n) => n.villager.id === house.owner.id)!;
-    this.placeNpc(owner, house.owner.id, house.room.ownerSpot, FACE_CAMERA);
+    const owner = this.npcs.find((n) => n.villager === house.villager)!;
+    this.placeNpc(owner, house.key, house.room.ownerSpot, FACE_CAMERA);
   }
 
   private placeNpc(npc: Npc, area: string, at: Point, heading: number): void {
@@ -418,6 +575,7 @@ export class World {
     this.islandGroup.visible = area === ISLAND;
     for (const [id, house] of this.houses) house.group.visible = id === area;
     for (const npc of this.npcs) npc.animator.rig.root.visible = npc.area === area;
+    this.hud.decorateButton.hidden = area !== this.ownHouse?.key || this.editor.isOpen;
   }
 
   private startTalking(npc: Npc): void {
@@ -532,7 +690,7 @@ export class World {
 
   /** Shows "Talk to…" over a nearby villager, or the owner's name over a nearby door. */
   private updatePrompt(): void {
-    if (this.talkingTo || this.transitioning) {
+    if (this.talkingTo || this.transitioning || this.editor.isOpen) {
       this.hud.showPrompt('', null);
       return;
     }
@@ -544,10 +702,29 @@ export class World {
     const house = this.nearestDoor();
     if (house) {
       const door = houseDoor(house.site);
-      this.showPromptAt(`🚪 ${house.owner.name}'s house`, new THREE.Vector3(door.x, 1.9, door.z - 0.5));
+      const label = house === this.ownHouse ? '🏠 Your house' : `🚪 ${house.name}'s house`;
+      this.showPromptAt(label, new THREE.Vector3(door.x, 1.9, door.z - 0.5));
+      return;
+    }
+    const lot = this.nearestEmptyLot();
+    if (lot) {
+      const door = houseDoor(lot);
+      this.showPromptAt('🪧 For sale: a new resident gets this lot', new THREE.Vector3(door.x, 1.3, door.z - 0.4));
       return;
     }
     this.hud.showPrompt('', null);
+  }
+
+  private nearestEmptyLot(): HouseSite | null {
+    if (this.player.area !== ISLAND) return null;
+    const taken = new Set([...this.houses.values()].map((h) => h.site));
+    return (
+      this.map.plots.find((site) => {
+        if (taken.has(site)) return false;
+        const door = houseDoor(site);
+        return Math.hypot(door.x - this.player.x, door.z - this.player.z) < DOOR_PROMPT_DISTANCE;
+      }) ?? null
+    );
   }
 
   private showPromptAt(text: string, at: THREE.Vector3): void {
@@ -558,15 +735,24 @@ export class World {
 
   private placeCamera(snap: boolean, dt = 0): void {
     const focus = new THREE.Vector3(this.player.x, 0.6, this.player.z);
-    if (this.player.area !== ISLAND) {
+    let offset = CAMERA_OFFSET;
+    if (this.editor.isOpen) {
+      // Decorating: frame the whole room in the space the panel leaves free.
+      // Wide screens have the panel on the right, so aim right of center to
+      // shift the room left. Portrait screens have it along the bottom, so
+      // pull back and aim forward to lift the room up.
+      const portrait = this.camera.aspect < 0.8;
+      focus.set(portrait ? 0 : 1.6, 0.6, portrait ? 3.4 : 0.4);
+      offset = CAMERA_OFFSET.clone().multiplyScalar(portrait ? 1.55 : 1.05);
+    } else if (this.player.area !== ISLAND) {
       // Indoors, drift only a little so the whole room stays in view.
       focus.x = THREE.MathUtils.clamp(focus.x, -1.2, 1.2);
       focus.z = THREE.MathUtils.clamp(focus.z, -1.5, 0.8);
     }
-    const wanted = focus.clone().add(CAMERA_OFFSET);
+    const wanted = focus.clone().add(offset);
     if (snap) this.camera.position.copy(wanted);
     else this.camera.position.lerp(wanted, Math.min(1, dt * 5));
-    this.camera.lookAt(this.camera.position.clone().sub(CAMERA_OFFSET));
+    this.camera.lookAt(this.camera.position.clone().sub(offset));
 
     // Keep the shadow-casting light centered on the player.
     this.sun.position.set(focus.x + 6, 14, focus.z + 5);
@@ -594,4 +780,13 @@ export class World {
       this.scene.fog = new THREE.Fog(s.sky, 25, 60);
     }
   }
+}
+
+function disposeTree(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    if (o instanceof THREE.Mesh) {
+      o.geometry.dispose();
+      (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
+    }
+  });
 }

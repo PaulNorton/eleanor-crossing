@@ -5,7 +5,7 @@ export interface PlayerState {
   x: number;
   z: number;
   heading: number;
-  /** Id of the villager whose house the character is in. Absent when outdoors. */
+  /** Which house the character is in: a villager id, or `home-<characterId>` for a player house. Absent when outdoors. */
   inside?: string;
 }
 
@@ -21,7 +21,7 @@ export function normalizePlayerState(raw: unknown): PlayerState | null {
   const ok = [s.x, s.z, s.heading].every((n) => typeof n === 'number' && Number.isFinite(n));
   if (!ok) return null;
   const state: PlayerState = { x: s.x as number, z: s.z as number, heading: s.heading as number };
-  if (typeof s.inside === 'string' && /^[a-z0-9-]{1,32}$/.test(s.inside)) state.inside = s.inside;
+  if (typeof s.inside === 'string' && /^[A-Za-z0-9-]{1,80}$/.test(s.inside)) state.inside = s.inside;
   return state;
 }
 

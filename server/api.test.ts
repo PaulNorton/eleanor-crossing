@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createCharacter, defaultAppearance } from '../src/character/model';
-import { HttpCharacterRepository, HttpWorldStateRepository } from '../src/storage/httpRepositories';
+import { HttpCharacterRepository, HttpHomeRepository, HttpWorldStateRepository } from '../src/storage/httpRepositories';
 import { migrateBrowserData } from '../src/storage/migrate';
 import { createApi } from './api';
 import { hostName } from './hosts';
@@ -199,5 +199,68 @@ describe('player state API', () => {
     await call(`/api/characters/${c.id}`, json('PUT', c));
     await call(`/api/characters/${c.id}/state`, json('PUT', { x: 0, z: 2, heading: 0, inside: 'pip' }));
     expect(await (await call(`/api/characters/${c.id}/state`)).json()).toEqual({ x: 0, z: 2, heading: 0, inside: 'pip' });
+  });
+});
+
+describe('homes API', () => {
+  const put = (c: ReturnType<typeof createCharacter>) => call(`/api/characters/${c.id}`, json('PUT', c));
+
+  it('gives each new character a house on the lowest free plot', async () => {
+    const a = createCharacter('Ann', defaultAppearance());
+    const b = createCharacter('Bo', defaultAppearance());
+    await put(a);
+    await put(b);
+    const homes = await (await call('/api/homes')).json();
+    expect(homes.map((h: { characterId: string; plot: number }) => [h.characterId, h.plot])).toEqual([
+      [a.id, 0],
+      [b.id, 1],
+    ]);
+    // The roof starts in the character's shirt color.
+    expect(homes[0].exterior.roof).toBe(a.appearance.shirtColor);
+    // Deleting frees the plot for the next resident.
+    await call(`/api/characters/${a.id}`, { method: 'DELETE' });
+    expect((await call(`/api/homes/${a.id}`)).status).toBe(404);
+    const c = createCharacter('Cy', defaultAppearance());
+    await put(c);
+    expect((await (await call(`/api/homes/${c.id}`)).json()).plot).toBe(0);
+  });
+
+  it('saves decorating but never lets the client move plots', async () => {
+    const a = createCharacter('Ann', defaultAppearance());
+    await put(a);
+    const home = await (await call(`/api/homes/${a.id}`)).json();
+    const res = await call(
+      `/api/homes/${a.id}`,
+      json('PUT', { ...home, plot: 5, exterior: { ...home.exterior, roof: '#123456' }, interior: { ...home.interior, furniture: [] } }),
+    );
+    expect(res.status).toBe(200);
+    const saved = await (await call(`/api/homes/${a.id}`)).json();
+    expect(saved.plot).toBe(0);
+    expect(saved.exterior.roof).toBe('#123456');
+    expect(saved.interior.furniture).toEqual([]);
+  });
+
+  it('runs out of plots gracefully', async () => {
+    for (let i = 0; i < 9; i++) await put(createCharacter(`R${i}`, defaultAppearance()));
+    expect(await (await call('/api/homes')).json()).toHaveLength(8);
+  });
+
+  it('builds houses for characters saved before houses existed', async () => {
+    const a = createCharacter('Old', defaultAppearance());
+    await stopServer();
+    const { writeFile, mkdir } = await import('node:fs/promises');
+    await mkdir(join(dir, 'data'), { recursive: true });
+    await writeFile(dataFile, JSON.stringify({ version: 1, characters: { [a.id]: a }, playerStates: {} }));
+    await startServer();
+    expect((await store.getHome(a.id))?.plot).toBe(0);
+  });
+
+  it('round-trips through HttpHomeRepository', async () => {
+    const a = createCharacter('Ann', defaultAppearance());
+    await put(a);
+    const repo = new HttpHomeRepository(relativeFetch);
+    const [home] = await repo.list();
+    const saved = await repo.save({ ...home, interior: { ...home.interior, wallpaper: '#abcdef' } });
+    expect(saved.interior.wallpaper).toBe('#abcdef');
   });
 });

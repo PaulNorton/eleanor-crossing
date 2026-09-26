@@ -25,7 +25,7 @@ function reachable(room: Room, step = 0.1): (x: number, z: number) => boolean {
 }
 
 describe.each(PERSONALITIES)('a %s villager’s room', (personality) => {
-  const room = new Room(personality);
+  const room = Room.forPersonality(personality);
 
   it('keeps all furniture inside the walls', () => {
     for (const f of room.furniture) {
@@ -59,7 +59,7 @@ describe.each(PERSONALITIES)('a %s villager’s room', (personality) => {
 
 describe('Room.canStand', () => {
   it('blocks walls and furniture but not rugs', () => {
-    const room = new Room('cheerful');
+    const room = Room.forPersonality('cheerful');
     expect(room.canStand(ROOM_WIDTH / 2, 0, RADIUS)).toBe(false);
     const bed = room.furniture.find((f) => f.kind === 'bed')!;
     expect(room.canStand(bed.x, bed.z, RADIUS)).toBe(false);

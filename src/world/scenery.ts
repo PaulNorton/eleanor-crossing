@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FOUNTAIN_TILE, HOUSE_SIZE, type IslandMap, MAP_SIZE, type Prop, Tile, mulberry32, tileCenter } from './map';
+import { FOUNTAIN_TILE, HOUSE_SIZE, type HouseSite, type IslandMap, MAP_SIZE, type Prop, Tile, mulberry32, tileCenter } from './map';
 
 export const WATER_Y = -0.22;
 const RIVERBED_Y = -0.5;
@@ -136,13 +136,20 @@ export function buildScenery(map: IslandMap, styles: readonly HouseStyle[]): THR
 
   for (const house of map.houses) {
     const style = styles.find((s) => s.owner === house.owner);
-    group.add(buildHouse(house.tx, house.tz, style?.roofColor ?? '#c0392b'));
+    group.add(buildHouse(house, { roof: style?.roofColor ?? '#c0392b', walls: '#fff4dc', door: '#8b5e3c' }));
   }
   group.add(buildFountain());
   return group;
 }
 
-function buildHouse(tx: number, tz: number, roofColor: string): THREE.Group {
+export interface HouseColors {
+  roof: string;
+  walls: string;
+  door: string;
+}
+
+export function buildHouse({ tx, tz }: HouseSite, colors: HouseColors): THREE.Group {
+  const roofColor = colors.roof;
   const house = new THREE.Group();
   const center = tileCenter(tx + (HOUSE_SIZE - 1) / 2, tz + (HOUSE_SIZE - 1) / 2);
   house.position.set(center.x, 0, center.z);
@@ -154,10 +161,10 @@ function buildHouse(tx: number, tz: number, roofColor: string): THREE.Group {
     house.add(mesh);
     return mesh;
   };
-  add(new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.6, 2.6), lambert('#fff4dc')), 0, 0.8, 0);
+  add(new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.6, 2.6), lambert(colors.walls)), 0, 0.8, 0);
   const roof = add(new THREE.Mesh(new THREE.ConeGeometry(2.3, 1.3, 4), lambert(roofColor)), 0, 2.25, 0);
   roof.rotation.y = Math.PI / 4;
-  add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 1, 0.08), lambert('#8b5e3c')), 0, 0.5, 1.31);
+  add(new THREE.Mesh(new THREE.BoxGeometry(0.6, 1, 0.08), lambert(colors.door)), 0, 0.5, 1.31);
   add(new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), lambert('#f1c40f')), 0.18, 0.5, 1.37);
   for (const side of [-1, 1]) {
     add(new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.06), lambert('#a8dcf0')), side * 0.8, 0.95, 1.31);
@@ -166,6 +173,33 @@ function buildHouse(tx: number, tz: number, roofColor: string): THREE.Group {
   add(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6, 6), lambert('#8b5e3c')), 1.05, 0.3, 1.75);
   add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.3), lambert(roofColor)), 1.05, 0.66, 1.75);
   return house;
+}
+
+/** An empty plot: a dirt patch, a low fence, and a sign. */
+export function buildEmptyLot({ tx, tz }: HouseSite): THREE.Group {
+  const lot = new THREE.Group();
+  const center = tileCenter(tx + (HOUSE_SIZE - 1) / 2, tz + (HOUSE_SIZE - 1) / 2);
+  lot.position.set(center.x, 0, center.z);
+  const add = (mesh: THREE.Mesh, x: number, y: number, z: number) => {
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    lot.add(mesh);
+    return mesh;
+  };
+  add(new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.03, 2.9), lambert('#c9a66b')), 0, 0.015, 0).castShadow = false;
+  const post = new THREE.CylinderGeometry(0.05, 0.05, 0.5, 6);
+  const wood = lambert('#a0703f');
+  for (let i = 0; i <= 6; i++) {
+    const t = -1.4 + (i * 2.8) / 6;
+    for (const [x, z] of [[t, -1.4], [t, 1.4], [-1.4, t], [1.4, t]]) add(new THREE.Mesh(post, wood), x, 0.25, z);
+  }
+  for (const [x, z, sx, sz] of [[0, -1.4, 2.8, 0.05], [0, 1.4, 2.8, 0.05], [-1.4, 0, 0.05, 2.8], [1.4, 0, 0.05, 2.8]]) {
+    add(new THREE.Mesh(new THREE.BoxGeometry(sx, 0.06, sz), wood), x, 0.38, z);
+  }
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1, 6), wood), 0, 0.5, 1.1);
+  add(new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.45, 0.06), lambert('#fff4dc')), 0, 0.95, 1.14);
+  return lot;
 }
 
 function buildFountain(): THREE.Group {

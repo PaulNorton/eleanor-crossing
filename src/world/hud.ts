@@ -18,6 +18,7 @@ export class Hud {
   readonly knob = h('div', { className: 'knob' });
   readonly actionButton = h('button', { className: 'action-button' }, 'A');
   readonly editButton = h('button', { className: 'edit-button' }, '✏️ Edit character');
+  readonly decorateButton = h('button', { className: 'decorate-button', hidden: true }, '🛠 Decorate');
 
   private readonly playerChip = h('div', { className: 'player-chip' });
   private readonly clock = h('div', { className: 'clock' });
@@ -38,7 +39,7 @@ export class Hud {
     this.joystick.append(this.knob);
     this.dialogue.append(this.dialogueName, this.dialogueText, this.dialogueNext);
     this.root.append(
-      h('div', { className: 'hud-top-left' }, this.playerChip, this.editButton),
+      h('div', { className: 'hud-top-left' }, this.playerChip, this.editButton, this.decorateButton),
       h('div', { className: 'hud-top-right' }, this.minimap, this.clock),
       this.prompt,
       this.dialogue,
@@ -47,6 +48,11 @@ export class Hud {
       this.actionButton,
       this.fadeEl,
     );
+    this.drawMinimapBase(map, houseColors);
+  }
+
+  /** Redraws the minimap's houses, e.g. after a roof changes color. */
+  setHouseColors(map: IslandMap, houseColors: Map<string, string>): void {
     this.drawMinimapBase(map, houseColors);
   }
 
@@ -148,7 +154,7 @@ export class Hud {
         ctx.fillRect(tx * s, tz * s, s, s);
       }
     }
-    for (const house of map.houses) {
+    for (const house of [...map.houses, ...map.plots]) {
       ctx.fillStyle = houseColors.get(house.owner) ?? '#c0392b';
       ctx.fillRect(house.tx * s, house.tz * s, 3 * s, 3 * s);
     }

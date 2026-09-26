@@ -17,7 +17,7 @@ export type Tile = (typeof Tile)[keyof typeof Tile];
 export type Prop = 'tree' | 'rock' | 'flower';
 
 export interface HouseSite {
-  /** Id of the NPC who lives here. */
+  /** Id of the villager who lives here, or `plot-N` for a player plot. */
   owner: string;
   /** Top-left tile of the 3x3 footprint. The door faces +z. */
   tx: number;
@@ -69,6 +69,8 @@ export class IslandMap {
   readonly blocked = new Uint8Array(MAP_SIZE * MAP_SIZE);
   readonly props = new Map<number, Prop>();
   readonly houses: HouseSite[] = [];
+  /** Plots for players' houses, in plot-number order. Always all present; empty ones show a sign. */
+  readonly plots: HouseSite[] = [];
   readonly spawn: Point;
 
   constructor(houses: readonly Omit<HouseSite, 'tx' | 'tz'>[] = [], seed = 20260926) {
@@ -77,8 +79,9 @@ export class IslandMap {
     this.carveRiver();
     this.layPlaza();
     HOUSE_SPOTS.slice(0, houses.length).forEach((spot, i) => {
-      this.placeHouse({ owner: houses[i].owner, ...spot });
+      this.houses.push(this.placeHouse({ owner: houses[i].owner, ...spot }));
     });
+    PLOT_SPOTS.forEach((spot, i) => this.plots.push(this.placeHouse({ owner: plotId(i), ...spot })));
     this.scatterProps(rand);
     this.spawn = tileCenter(HALF, HALF + 3);
   }
@@ -161,20 +164,26 @@ export class IslandMap {
     for (const [i, j] of [[0, 0], [1, 0], [0, 1], [1, 1]]) this.blocked[this.index(tx + i, tz + j)] = 1;
   }
 
-  private placeHouse(site: HouseSite): void {
-    this.houses.push(site);
-    for (let j = 0; j < HOUSE_SIZE; j++) {
+  private placeHouse(site: HouseSite): HouseSite {    for (let j = 0; j < HOUSE_SIZE; j++) {
       for (let i = 0; i < HOUSE_SIZE; i++) {
         this.set(site.tx + i, site.tz + j, Tile.Grass);
         this.blocked[this.index(site.tx + i, site.tz + j)] = 1;
       }
     }
-    // A two-wide path from the door to the plaza: down to the plaza row, then across.
+    // A two-wide path from the door to the plaza: to the plaza row, then across.
+    // Doors face +z, so houses south of the plaza first step out beside the house.
     const doorX = site.tx + 1;
     const doorZ = site.tz + HOUSE_SIZE;
     const step = (a: number, b: number) => (a < b ? 1 : -1);
     let x = doorX;
     let z = doorZ;
+    if (doorZ > HALF) {
+      const besideX = site.tx + HOUSE_SIZE + 1;
+      while (x !== besideX) {
+        this.paveAt(x, z);
+        x += step(x, besideX);
+      }
+    }
     while (z !== HALF) {
       this.paveAt(x, z);
       z += step(z, HALF);
@@ -183,6 +192,7 @@ export class IslandMap {
       this.paveAt(x, z);
       x += step(x, HALF);
     }
+    return site;
   }
 
   /** Paves a 2x2 block. Pavement over the river becomes a bridge. */
@@ -230,3 +240,19 @@ const HOUSE_SPOTS = [
 ] as const;
 
 export const MAX_HOUSES = HOUSE_SPOTS.length;
+
+/** Plots for players' houses. Each playable character gets the lowest free one. */
+const PLOT_SPOTS = [
+  { tx: 29, tz: 17 },
+  { tx: 34, tz: 17 },
+  { tx: 30, tz: 40 },
+  { tx: 19, tz: 39 },
+  { tx: 10, tz: 24 },
+  { tx: 12, tz: 19 },
+  { tx: 18, tz: 47 },
+  { tx: 46, tz: 26 },
+] as const;
+
+export const PLOT_COUNT = PLOT_SPOTS.length;
+
+export const plotId = (index: number) => `plot-${index}`;

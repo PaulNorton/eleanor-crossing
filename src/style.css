@@ -516,3 +516,130 @@ footer .danger:hover {
 .fade.on {
   opacity: 1;
 }
+
+/* ---------- Decorating ---------- */
+
+.decorate-button {
+  background: var(--cream);
+  border-width: 3px;
+}
+
+.hud.decorating .joystick,
+.hud.decorating .action-button,
+.hud.decorating .controls-hint,
+.hud.decorating .hud-top-right {
+  display: none;
+}
+
+.decorate-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  width: min(360px, calc(100% - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--cream);
+  border: 4px solid var(--line);
+  border-radius: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.decorate-panel > * {
+  flex-shrink: 0;
+}
+
+.decorate-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.decorate-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--leaf-dark);
+}
+
+.decorate-header .primary {
+  background: var(--leaf);
+  border-color: var(--leaf-dark);
+  color: #fff;
+  font-weight: 700;
+}
+
+.decorate-hint {
+  margin: 0;
+  min-height: 1.3em;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.decorate-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.decorate-body h3 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 6px;
+}
+
+.catalog-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  white-space: normal;
+}
+
+.catalog-item .icon {
+  font-size: 1.5rem;
+}
+
+.catalog-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.decorate-note {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.decorate-panel .danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+@media (max-width: 760px), (pointer: coarse) and (orientation: portrait) {
+  .decorate-panel {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    max-height: 46%;
+    padding: 12px;
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IslandMap, MAP_SIZE, MAX_HOUSES, Tile, houseDoor, tileCenter, worldToTile } from './map';
+import { IslandMap, MAP_SIZE, MAX_HOUSES, PLOT_COUNT, Tile, houseDoor, tileCenter, worldToTile } from './map';
 import { VILLAGERS } from './npcs';
 
 const RADIUS = 0.28;
@@ -60,6 +60,23 @@ describe('IslandMap', () => {
   it('has a river crossed by a bridge', () => {
     expect(map.tiles.includes(Tile.River)).toBe(true);
     expect(map.tiles.includes(Tile.Bridge)).toBe(true);
+  });
+
+  it('never runs a path under a building', () => {
+    for (let i = 0; i < map.tiles.length; i++) {
+      if (map.blocked[i]) expect(map.tiles[i], `tile ${i}`).not.toBe(Tile.Path);
+    }
+  });
+
+  it('has player plots that are all reachable', () => {
+    const reachable = reachableTiles(map);
+    expect(map.plots).toHaveLength(PLOT_COUNT);
+    for (const plot of map.plots) {
+      const door = houseDoor(plot);
+      expect(map.canStand(door.x, door.z, RADIUS), plot.owner).toBe(true);
+      const { tx, tz } = worldToTile(door.x, door.z);
+      expect(reachable.has(map.index(tx, tz)), `door of ${plot.owner}`).toBe(true);
+    }
   });
 
   it('can reach every front door from the spawn', () => {

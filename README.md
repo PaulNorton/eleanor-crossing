@@ -40,6 +40,15 @@ To run it by hand instead, stop the service first, then run `make serve` (tailne
 
 **Houses.** Walk into a villager's front door to go inside. The owner is home and welcomes you in. Each house has its own wall color and a furniture layout that suits its owner's personality. Walk down onto the red doormat to leave.
 
+**Your own house.** Every resident gets a house on one of eight plots, assigned automatically when the character is created. Empty plots show a "For sale" sign. Anyone can visit anyone's house, but only its owner can decorate it. Inside your own house, press **🛠 Decorate** to:
+
+- add furniture from a catalog of 14 pieces (up to 40 in a house), then tap or click the floor to place it
+- tap a placed piece to turn, move, recolor, or put it away
+- change the wallpaper, floor style (wood, tile, checker, carpet), and floor color
+- change the roof, wall, and door colors seen from outside
+
+Furniture cannot overlap, leave the room, or block the path in from the door. On a keyboard, R turns the held or selected piece, Delete puts it away, and Esc cancels. Changes save as you make them.
+
 | Action | Keyboard | Touch |
 | --- | --- | --- |
 | Move | WASD or arrow keys | Joystick, bottom left |
@@ -68,6 +77,9 @@ To run it by hand instead, stop the service first, then run `make serve` (tailne
 | `src/world/scenery.ts` | Builds the island's 3D scenery. |
 | `src/world/interior.ts` | House rooms: furniture layouts and collision. Pure data, no rendering. |
 | `src/world/interiorScenery.ts` | Builds rooms and furniture in 3D. |
+| `src/home/home.ts` | Player houses: data, furniture catalog, validation, plot assignment. |
+| `src/world/homeEditor.ts` | Decorating: placing, moving, turning, and recoloring furniture. |
+| `src/world/decoratePanel.ts` | The Decorate panel. |
 | `src/world/world.ts` | The island game loop: player, villagers, camera. |
 | `src/world/hud.ts` | Dialogue box, talk prompt, minimap, clock, touch controls. |
 | `src/world/input.ts` | Keyboard and touch input. |
@@ -77,7 +89,7 @@ To run it by hand instead, stop the service first, then run `make serve` (tailne
 
 Game data lives on the server in `data/eleanor-crossing.json`, so every device sees the same residents. The file is not in git. Back it up if you care about it.
 
-- Characters and where each one last stood are stored on the server.
+- Characters, their houses, and where each one last stood are stored on the server. Creating a character gives it the lowest free plot. Deleting it frees the plot.
 - The character a device plays as is stored in that browser. Two devices can play different residents.
 - Characters saved in a browser before the server existed upload automatically the first time that browser opens the game.
 
@@ -85,6 +97,8 @@ Game data lives on the server in `data/eleanor-crossing.json`, so every device s
 | --- | --- | --- |
 | GET | `/api/characters` | List characters. |
 | GET, PUT, DELETE | `/api/characters/:id` | Read, create or update, delete a character. Deleting also removes its position. |
+| GET | `/api/homes` | List every player's house. |
+| GET, PUT | `/api/homes/:characterId` | Read or save a house. The server keeps the plot; the request cannot change it. |
 | GET, PUT | `/api/characters/:id/state` | Read or save where the character is standing, and which house they are in. Reads `null` if never saved. |
 
 The server checks everything it receives with the same `normalizeCharacter` and `normalizePlayerState` functions the browser uses. It writes the data file atomically after each change. `server/store.ts` defines a `GameStore` interface, so a database can replace the JSON file later.

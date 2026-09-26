@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { normalizeCharacter } from '../src/character/model';
+import { normalizeHome } from '../src/home/home';
 import { normalizePlayerState } from '../src/storage/worldStateRepository';
 import type { GameStore } from './store';
 
@@ -8,6 +9,8 @@ const ID = '([A-Za-z0-9-]{1,64})';
 const CHARACTERS = /^\/api\/characters\/?$/;
 const CHARACTER = new RegExp(`^/api/characters/${ID}$`);
 const STATE = new RegExp(`^/api/characters/${ID}/state$`);
+const HOMES = /^\/api\/homes\/?$/;
+const HOME = new RegExp(`^/api/homes/${ID}$`);
 
 class HttpError extends Error {
   constructor(
@@ -98,6 +101,24 @@ export function createApi(store: GameStore) {
         if (!state) throw new HttpError(400, 'That is not a valid position.');
         await store.putPlayerState(id, state);
         return send(res, 204);
+      }
+      throw new HttpError(405, 'Method not allowed.');
+    }
+
+    if (HOMES.test(path)) {
+      if (method !== 'GET') throw new HttpError(405, 'Method not allowed.');
+      return send(res, 200, await store.listHomes());
+    }
+
+    if ((m = path.match(HOME))) {
+      const existing = await store.getHome(m[1]);
+      if (!existing) return send(res, 404, { error: 'That character has no house.' });
+      if (method === 'GET') return send(res, 200, existing);
+      if (method === 'PUT') {
+        // The plot and owner come from the server's record, never the request.
+        const home = { ...normalizeHome(await readJson(req), existing.characterId, existing.plot), updatedAt: new Date().toISOString() };
+        await store.putHome(home);
+        return send(res, 200, home);
       }
       throw new HttpError(405, 'Method not allowed.');
     }

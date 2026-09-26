@@ -11,12 +11,22 @@ npm run dev
 
 Open the URL Vite prints (usually http://localhost:5173).
 
+### From other devices on your tailnet
+
+```sh
+npm run dev:tailnet
+```
+
+This binds the server to the machine's Tailscale IP only, so it is not reachable from the local network or the internet. Open `http://<machine>.<tailnet>.ts.net:5173` or `http://<tailscale-ip>:5173` from any device on the tailnet. `npm run preview:tailnet` does the same for the production build.
+
 ## Scripts
 
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Start the dev server with hot reload. |
+| `npm run dev:tailnet` | Start the dev server on the Tailscale IP. |
 | `npm run build` | Type-check and build to `dist/`. |
+| `npm run preview:tailnet` | Serve the built app on the Tailscale IP. |
 | `npm test` | Run unit tests. |
 | `npm run typecheck` | Type-check only. |
 

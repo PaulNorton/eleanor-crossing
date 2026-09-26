@@ -9,7 +9,7 @@ The game runs as a background service on this machine, reachable only over Tails
 - http://paulnorton-server.tailc69c78.ts.net:8003
 - http://100.66.242.25:8003
 
-Edits to the code show up right away through hot reload. No restart needed.
+Edits to the code show up right away. Browser code hot-reloads through Vite. Server code (`server/` and the shared files it imports) restarts the server automatically.
 
 ```sh
 make install      # install the systemd user service, enable it, and start it
@@ -36,13 +36,17 @@ To run it by hand instead, stop the service first, then run `make serve` (tailne
 
 **Character creator.** Pick a person or an animal (cat, dog, bunny, bear, fox, frog). Choose skin or fur color, eyes, cheeks, hair, outfit, and hat. Drag the 3D preview to spin it. Save as many residents as you like.
 
-**The island.** Walk around a small island with a plaza, fountain, river, bridge, beach, trees, rocks, and flowers. Six villagers live in their own houses. They wander near home, stop when you come close, and chat when you talk to them. The sky follows your local time of day. The game remembers where you were standing.
+**The island.** Walk around a small island with a plaza, fountain, river, bridge, beach, trees, rocks, and flowers. Six villagers live in their own houses. They wander near home, stop when you come close, and chat when you talk to them. The sky follows your local time of day. The game remembers where you were standing, even indoors.
+
+**Houses.** Walk into a villager's front door to go inside. The owner is home and welcomes you in. Each house has its own wall color and a furniture layout that suits its owner's personality. Walk down onto the red doormat to leave.
 
 | Action | Keyboard | Touch |
 | --- | --- | --- |
 | Move | WASD or arrow keys | Joystick, bottom left |
 | Run | Hold Shift | Push the joystick all the way |
 | Talk / next line | E, Space, or Enter | A button, bottom right |
+| Enter a house | Walk into the front door | Same |
+| Leave a house | Walk onto the doormat | Same |
 
 ## Code layout
 
@@ -62,6 +66,8 @@ To run it by hand instead, stop the service first, then run `make serve` (tailne
 | `src/world/map.ts` | Island layout and collision. Pure data, no rendering. |
 | `src/world/npcs.ts` | Villagers and their dialogue. |
 | `src/world/scenery.ts` | Builds the island's 3D scenery. |
+| `src/world/interior.ts` | House rooms: furniture layouts and collision. Pure data, no rendering. |
+| `src/world/interiorScenery.ts` | Builds rooms and furniture in 3D. |
 | `src/world/world.ts` | The island game loop: player, villagers, camera. |
 | `src/world/hud.ts` | Dialogue box, talk prompt, minimap, clock, touch controls. |
 | `src/world/input.ts` | Keyboard and touch input. |
@@ -79,6 +85,6 @@ Game data lives on the server in `data/eleanor-crossing.json`, so every device s
 | --- | --- | --- |
 | GET | `/api/characters` | List characters. |
 | GET, PUT, DELETE | `/api/characters/:id` | Read, create or update, delete a character. Deleting also removes its position. |
-| GET, PUT | `/api/characters/:id/state` | Read or save where the character is standing. |
+| GET, PUT | `/api/characters/:id/state` | Read or save where the character is standing, and which house they are in. Reads `null` if never saved. |
 
 The server checks everything it receives with the same `normalizeCharacter` and `normalizePlayerState` functions the browser uses. It writes the data file atomically after each change. `server/store.ts` defines a `GameStore` interface, so a database can replace the JSON file later.

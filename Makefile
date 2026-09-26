@@ -21,7 +21,8 @@ install:          ## run it on every boot, on the tailnet
 	mkdir -p data node_modules/.vite $(HOME)/.config/systemd/user
 	cp tools/systemd/eleanor-crossing.service $(HOME)/.config/systemd/user/
 	systemctl --user daemon-reload
-	systemctl --user enable --now eleanor-crossing
+	systemctl --user enable eleanor-crossing
+	systemctl --user restart eleanor-crossing
 	systemctl --user status --no-pager eleanor-crossing
 
 uninstall:

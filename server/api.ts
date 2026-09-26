@@ -90,8 +90,8 @@ export function createApi(store: GameStore) {
       const id = m[1];
       if (!(await store.getCharacter(id))) return send(res, 404, { error: 'No such character.' });
       if (method === 'GET') {
-        const s = await store.getPlayerState(id);
-        return s ? send(res, 200, s) : send(res, 404, { error: 'No saved position.' });
+        // null means the character has not been placed yet.
+        return send(res, 200, await store.getPlayerState(id));
       }
       if (method === 'PUT') {
         const state = normalizePlayerState(await readJson(req));

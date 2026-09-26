@@ -503,3 +503,16 @@ footer .danger:hover {
     font-size: 0.85rem;
   }
 }
+
+.fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+
+.fade.on {
+  opacity: 1;
+}

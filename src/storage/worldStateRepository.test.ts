@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LocalStorageWorldStateRepository } from './worldStateRepository';
+import { LocalStorageWorldStateRepository, normalizePlayerState } from './worldStateRepository';
 
 function memoryStore() {
   const data = new Map<string, string>();
@@ -27,5 +27,12 @@ describe('LocalStorageWorldStateRepository', () => {
     expect(await repo.getPlayerState('a')).toBeNull();
     store.setItem('eleanor-crossing:player-state:a', 'nope');
     expect(await repo.getPlayerState('a')).toBeNull();
+  });
+});
+
+describe('normalizePlayerState', () => {
+  it('keeps a valid house id and drops a bad one', () => {
+    expect(normalizePlayerState({ x: 0, z: 0, heading: 0, inside: 'biscuit' })).toEqual({ x: 0, z: 0, heading: 0, inside: 'biscuit' });
+    expect(normalizePlayerState({ x: 0, z: 0, heading: 0, inside: '<script>' })).toEqual({ x: 0, z: 0, heading: 0 });
   });
 });

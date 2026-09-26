@@ -5,6 +5,8 @@ export interface PlayerState {
   x: number;
   z: number;
   heading: number;
+  /** Id of the villager whose house the character is in. Absent when outdoors. */
+  inside?: string;
 }
 
 export interface WorldStateRepository {
@@ -17,7 +19,10 @@ export function normalizePlayerState(raw: unknown): PlayerState | null {
   if (!raw || typeof raw !== 'object') return null;
   const s = raw as Record<string, unknown>;
   const ok = [s.x, s.z, s.heading].every((n) => typeof n === 'number' && Number.isFinite(n));
-  return ok ? { x: s.x as number, z: s.z as number, heading: s.heading as number } : null;
+  if (!ok) return null;
+  const state: PlayerState = { x: s.x as number, z: s.z as number, heading: s.heading as number };
+  if (typeof s.inside === 'string' && /^[a-z0-9-]{1,32}$/.test(s.inside)) state.inside = s.inside;
+  return state;
 }
 
 export const playerStateKey = (characterId: string) => `eleanor-crossing:player-state:${characterId}`;

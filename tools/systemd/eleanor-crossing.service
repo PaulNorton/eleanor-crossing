@@ -12,7 +12,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=%h/Projects/eleanor-crossing
-ExecStart=%h/Projects/eleanor-crossing/node_modules/.bin/tsx server/main.ts --port 8003
+# `watch` restarts the server when its own code changes. Browser code hot-reloads through Vite.
+ExecStart=%h/Projects/eleanor-crossing/node_modules/.bin/tsx watch --clear-screen=false server/main.ts --port 8003
 Restart=always
 RestartSec=10
 

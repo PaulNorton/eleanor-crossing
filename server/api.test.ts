@@ -183,3 +183,21 @@ describe('hostName', () => {
     expect(hostName(header)).toBe(name);
   });
 });
+
+describe('player state API', () => {
+  it('answers null for a character with no saved position', async () => {
+    const c = createCharacter('Eleanor', defaultAppearance());
+    await call(`/api/characters/${c.id}`, json('PUT', c));
+    const res = await call(`/api/characters/${c.id}/state`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toBeNull();
+    expect(await new HttpWorldStateRepository(relativeFetch).getPlayerState(c.id)).toBeNull();
+  });
+
+  it('keeps which house the character is in', async () => {
+    const c = createCharacter('Eleanor', defaultAppearance());
+    await call(`/api/characters/${c.id}`, json('PUT', c));
+    await call(`/api/characters/${c.id}/state`, json('PUT', { x: 0, z: 2, heading: 0, inside: 'pip' }));
+    expect(await (await call(`/api/characters/${c.id}/state`)).json()).toEqual({ x: 0, z: 2, heading: 0, inside: 'pip' });
+  });
+});

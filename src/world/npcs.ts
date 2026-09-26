@@ -115,11 +115,21 @@ const GREETINGS: Record<DayPart, string> = {
   night: "Oh! You're up late",
 };
 
-/** A short conversation: a greeting, then one line from the villager's pool. */
-export function conversation(v: Villager, playerName: string, hour: number, rand: () => number = Math.random): string[] {
+/**
+ * A short conversation: a greeting, then one line from the villager's pool.
+ * At home, they welcome you in instead of the usual greeting.
+ */
+export function conversation(
+  v: Villager,
+  playerName: string,
+  hour: number,
+  rand: () => number = Math.random,
+  atHome = false,
+): string[] {
   const line = v.lines[Math.floor(rand() * v.lines.length)];
+  const greeting = atHome ? `Welcome to my place, ${playerName}` : `${GREETINGS[dayPart(hour)]}, ${playerName}`;
   return [
-    `${GREETINGS[dayPart(hour)]}, ${playerName}, ${v.catchphrase}!`,
+    `${greeting}, ${v.catchphrase}!`,
     line.replaceAll('{player}', playerName),
   ];
 }

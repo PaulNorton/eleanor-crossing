@@ -3,6 +3,7 @@ import { type IslandMap, MAP_SIZE, type Point } from './map';
 import { tileColor } from './scenery';
 
 const CHARS_PER_SECOND = 45;
+const FADE_MS = 250;
 const MINIMAP_SCALE = 2;
 
 export interface MinimapDot extends Point {
@@ -23,6 +24,7 @@ export class Hud {
   private readonly minimap = h('canvas', { className: 'minimap', width: MAP_SIZE * MINIMAP_SCALE, height: MAP_SIZE * MINIMAP_SCALE });
   private readonly minimapBase = document.createElement('canvas');
   private readonly prompt = h('div', { className: 'talk-prompt', hidden: true });
+  private readonly fadeEl = h('div', { className: 'fade' });
   private readonly dialogue = h('div', { className: 'dialogue', hidden: true, role: 'dialog' } as Partial<HTMLDivElement>);
   private readonly dialogueName = h('div', { className: 'dialogue-name' });
   private readonly dialogueText = h('p', { className: 'dialogue-text' });
@@ -43,6 +45,7 @@ export class Hud {
       h('div', { className: 'controls-hint' }, 'WASD / arrows: move · Shift: run · E: talk'),
       this.joystick,
       this.actionButton,
+      this.fadeEl,
     );
     this.drawMinimapBase(map, houseColors);
   }
@@ -61,6 +64,12 @@ export class Hud {
     if (!at) return;
     this.prompt.textContent = text;
     this.prompt.style.transform = `translate(${at.x}px, ${at.y}px) translate(-50%, -100%)`;
+  }
+
+  /** Fades the screen to black (true) or back (false). Resolves when done. */
+  fade(toBlack: boolean): Promise<void> {
+    this.fadeEl.classList.toggle('on', toBlack);
+    return new Promise((done) => window.setTimeout(done, FADE_MS));
   }
 
   get dialogueOpen(): boolean {

@@ -32,3 +32,10 @@ describe('conversation', () => {
     }
   });
 });
+
+describe('conversation at home', () => {
+  it('welcomes the player in', () => {
+    const [first] = conversation(VILLAGERS[0], 'Eleanor', 9, () => 0, true);
+    expect(first).toBe(`Welcome to my place, Eleanor, ${VILLAGERS[0].catchphrase}!`);
+  });
+});

@@ -1,0 +1,27 @@
+# Keep the game running across logout and reboot, on the tailnet only.
+#
+#   make install        # copy, enable and start
+#   make uninstall
+#   sudo loginctl enable-linger $USER    # survive logout too
+
+[Unit]
+Description=Eleanor Crossing (tailnet only)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projects/eleanor-crossing
+ExecStart=%h/Projects/eleanor-crossing/node_modules/.bin/tsx server/main.ts --port 8003
+Restart=always
+RestartSec=10
+
+# Writes only game data (data/) and Vite's cache (node_modules/.vite).
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/Projects/eleanor-crossing/data %h/Projects/eleanor-crossing/node_modules/.vite
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

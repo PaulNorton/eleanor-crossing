@@ -37,7 +37,6 @@ type ColorKey = { [K in keyof Appearance]: Appearance[K] extends string ? K : ne
 export interface CreatorEvents {
   /** The player saved a character and wants to go to the island. */
   onPlay(character: Character): void;
-  onDelete(characterId: string): void;
 }
 
 /** The character creation panel. Owns the in-progress character and syncs it to the stage. */
@@ -72,7 +71,7 @@ export class CharacterCreator {
 
   async start(): Promise<void> {
     this.render();
-    this.characters = await this.repo.list();
+    this.characters = await this.attempt(() => this.repo.list(), []);
     const activeId = await this.repo.getActiveId();
     const active = this.characters.find((c) => c.id === activeId);
     if (active) this.load(active);
@@ -81,8 +80,19 @@ export class CharacterCreator {
 
   /** Reopens the creator on an existing character, e.g. when returning from the island. */
   async edit(character: Character): Promise<void> {
-    this.characters = await this.repo.list();
+    this.characters = await this.attempt(() => this.repo.list(), this.characters);
     this.load(character);
+  }
+
+  /** Runs a storage call; on failure shows the error and returns the fallback. */
+  private async attempt<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+    try {
+      return await fn();
+    } catch (err) {
+      console.error(err);
+      this.showToast(err instanceof Error ? err.message : 'Something went wrong.');
+      return fallback;
+    }
   }
 
   private render(): void {
@@ -147,9 +157,10 @@ export class CharacterCreator {
     const character = this.editing
       ? { ...this.editing, name: this.name.trim(), appearance: { ...this.appearance } }
       : createCharacter(this.name, this.appearance);
-    const saved = await this.repo.save(character);
+    const saved = await this.attempt(() => this.repo.save(character), null);
+    if (!saved) return;
     await this.repo.setActiveId(saved.id);
-    this.characters = await this.repo.list();
+    this.characters = await this.attempt(() => this.repo.list(), this.characters);
     this.editing = saved;
     this.refresh();
     this.events.onPlay(saved);
@@ -158,9 +169,9 @@ export class CharacterCreator {
   private async remove(): Promise<void> {
     if (!this.editing) return;
     if (!confirm(`Delete ${this.editing.name}? This cannot be undone.`)) return;
-    await this.repo.remove(this.editing.id);
-    this.events.onDelete(this.editing.id);
-    this.characters = await this.repo.list();
+    const id = this.editing.id;
+    if (!(await this.attempt(() => this.repo.remove(id).then(() => true), false))) return;
+    this.characters = await this.attempt(() => this.repo.list(), []);
     this.showToast(`${this.editing.name} moved away.`);
     this.startNew();
   }

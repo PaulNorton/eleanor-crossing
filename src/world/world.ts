@@ -134,7 +134,10 @@ export class World {
   /** Loads the player's last position (or the plaza spawn) and starts the game loop. */
   static async create(opts: WorldOptions): Promise<World> {
     const map = new IslandMap(opts.villagers.map((v) => ({ owner: v.id })));
-    const saved = await opts.stateRepo.getPlayerState(opts.character.id);
+    const saved = await opts.stateRepo.getPlayerState(opts.character.id).catch((err: unknown) => {
+      console.warn('Could not load the saved position; starting at the plaza.', err);
+      return null;
+    });
     const start = saved && map.canStand(saved.x, saved.z, ACTOR_RADIUS) ? saved : { ...map.spawn, heading: 0 };
     return new World(opts, map, start);
   }
@@ -158,9 +161,15 @@ export class World {
 
   private async savePosition(): Promise<void> {
     const { x, z, heading } = this.player;
-    await this.opts.stateRepo.setPlayerState(this.opts.character.id, { x, z, heading });
     this.dirty = false;
     this.sinceSave = 0;
+    try {
+      await this.opts.stateRepo.setPlayerState(this.opts.character.id, { x, z, heading });
+    } catch (err) {
+      // Try again on the next save tick.
+      this.dirty = true;
+      console.warn('Could not save the position.', err);
+    }
   }
 
   private resize(): void {

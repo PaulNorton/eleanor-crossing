@@ -4,31 +4,33 @@ A cozy island life game in the browser, inspired by Animal Crossing. Built with 
 
 ## Run it
 
-```sh
-npm install
-npm run dev
-```
+The game runs as a background service on this machine, reachable only over Tailscale:
 
-Open the URL Vite prints (usually http://localhost:5173).
+- http://paulnorton-server.tailc69c78.ts.net:8003
+- http://100.66.242.25:8003
 
-### From other devices on your tailnet
+Edits to the code show up right away through hot reload. No restart needed.
 
 ```sh
-npm run dev:tailnet
+make install      # install the systemd user service, enable it, and start it
+make status       # is it running, and where
+make logs         # follow the log
+make uninstall    # stop it and remove the service
 ```
 
-This binds the server to the machine's Tailscale IP only, so it is not reachable from the local network or the internet. Open `http://<machine>.<tailnet>.ts.net:5173` or `http://<tailscale-ip>:5173` from any device on the tailnet. `npm run preview:tailnet` does the same for the production build.
+The service starts at boot and restarts if it crashes. To keep it running after you log out too:
 
-## Scripts
+```sh
+sudo loginctl enable-linger $USER
+```
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Start the dev server with hot reload. |
-| `npm run dev:tailnet` | Start the dev server on the Tailscale IP. |
-| `npm run build` | Type-check and build to `dist/`. |
-| `npm run preview:tailnet` | Serve the built app on the Tailscale IP. |
-| `npm test` | Run unit tests. |
-| `npm run typecheck` | Type-check only. |
+To run it by hand instead, stop the service first, then run `make serve` (tailnet) or `make serve-local` (this machine only).
+
+### How the server is locked down
+
+- It listens only on this machine's Tailscale addresses and 127.0.0.1. Devices on the local network cannot reach it.
+- It refuses requests whose Host header is not one of this machine's names. This blocks DNS-rebinding attacks from web pages open on tailnet devices.
+- The systemd unit can only write to `data/` and Vite's cache.
 
 ## Features
 
@@ -49,7 +51,12 @@ This binds the server to the machine's Tailscale IP only, so it is not reachable
 | `src/character/model.ts` | Character data, options, defaults, and validation. |
 | `src/character/build.ts` | Builds the 3D character from its data. |
 | `src/scene/stage.ts` | The 3D island scene, camera, and animation. |
-| `src/storage/characterRepository.ts` | Saves characters. |
+| `server/main.ts` | The server: Tailscale binding, Host check, Vite, and the API. |
+| `server/api.ts` | The `/api` routes. |
+| `server/store.ts` | Saves game data to a JSON file. |
+| `src/storage/httpRepositories.ts` | The browser's side of the API. |
+| `src/storage/migrate.ts` | Uploads data saved in the browser before the server existed. |
+| `src/storage/characterRepository.ts` | Character storage interface and the old browser-only version. |
 | `src/character/animator.ts` | Idle, walk, wave, and blink animation. |
 | `src/ui/creator.ts` | The character creator panel. |
 | `src/world/map.ts` | Island layout and collision. Pure data, no rendering. |
@@ -58,10 +65,20 @@ This binds the server to the machine's Tailscale IP only, so it is not reachable
 | `src/world/world.ts` | The island game loop: player, villagers, camera. |
 | `src/world/hud.ts` | Dialogue box, talk prompt, minimap, clock, touch controls. |
 | `src/world/input.ts` | Keyboard and touch input. |
-| `src/storage/worldStateRepository.ts` | Saves where each character is standing. |
+| `src/storage/worldStateRepository.ts` | Position storage interface and the old browser-only version. |
 
 ## Storage
 
-Characters and their positions live in the browser's `localStorage`. All saves go through the `CharacterRepository` and `WorldStateRepository` interfaces. Its methods are async. To move to a server, write new classes that implement the interfaces with HTTP calls, then pass them in `src/main.ts`. Nothing else needs to change.
+Game data lives on the server in `data/eleanor-crossing.json`, so every device sees the same residents. The file is not in git. Back it up if you care about it.
 
-Loaded data passes through `normalizeCharacter`, which drops bad records and fills missing fields with defaults. Server responses can use the same function.
+- Characters and where each one last stood are stored on the server.
+- The character a device plays as is stored in that browser. Two devices can play different residents.
+- Characters saved in a browser before the server existed upload automatically the first time that browser opens the game.
+
+| Method | Path | Does |
+| --- | --- | --- |
+| GET | `/api/characters` | List characters. |
+| GET, PUT, DELETE | `/api/characters/:id` | Read, create or update, delete a character. Deleting also removes its position. |
+| GET, PUT | `/api/characters/:id/state` | Read or save where the character is standing. |
+
+The server checks everything it receives with the same `normalizeCharacter` and `normalizePlayerState` functions the browser uses. It writes the data file atomically after each change. `server/store.ts` defines a `GameStore` interface, so a database can replace the JSON file later.

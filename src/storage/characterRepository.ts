@@ -1,9 +1,7 @@
 import { type Character, normalizeCharacter } from '../character/model';
+import type { KeyValueStore } from './keyValue';
 
-/**
- * Persistence boundary for characters. Methods are async so a server-backed
- * implementation can replace the localStorage one without touching callers.
- */
+/** Persistence boundary for characters. */
 export interface CharacterRepository {
   list(): Promise<Character[]>;
   get(id: string): Promise<Character | null>;
@@ -13,11 +11,10 @@ export interface CharacterRepository {
   setActiveId(id: string | null): Promise<void>;
 }
 
-const CHARACTERS_KEY = 'eleanor-crossing:characters';
-const ACTIVE_KEY = 'eleanor-crossing:active-character';
+export const CHARACTERS_KEY = 'eleanor-crossing:characters';
+export const ACTIVE_KEY = 'eleanor-crossing:active-character';
 
-type KeyValueStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
-
+/** Browser-only storage. Kept to migrate data saved before the server existed. */
 export class LocalStorageCharacterRepository implements CharacterRepository {
   constructor(private readonly store: KeyValueStore = window.localStorage) {}
 

@@ -16,6 +16,7 @@ import {
   validateName,
 } from '../character/model';
 import type { Stage } from '../scene/stage';
+import { h } from './dom';
 import type { CharacterRepository } from '../storage/characterRepository';
 
 const SPECIES_ICONS: Record<Species, string> = {
@@ -33,15 +34,10 @@ type Tab = (typeof TABS)[number];
 
 type ColorKey = { [K in keyof Appearance]: Appearance[K] extends string ? K : never }[keyof Appearance];
 
-function h<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  props: Partial<HTMLElementTagNameMap[K]> & { className?: string } = {},
-  ...children: (Node | string)[]
-): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
-  Object.assign(el, props);
-  el.append(...children);
-  return el;
+export interface CreatorEvents {
+  /** The player saved a character and wants to go to the island. */
+  onPlay(character: Character): void;
+  onDelete(characterId: string): void;
 }
 
 /** The character creation panel. Owns the in-progress character and syncs it to the stage. */
@@ -64,13 +60,14 @@ export class CharacterCreator {
   private readonly tabsEl = h('div', { className: 'tabs', role: 'tablist' } as Partial<HTMLDivElement>);
   private readonly optionsEl = h('div', { className: 'options' });
   private readonly saveButton = h('button', { className: 'primary' }, 'Save');
-  private readonly deleteButton = h('button', { className: 'danger' }, 'Delete');
+  private readonly deleteButton = h('button', { className: 'danger', title: 'Delete character', ariaLabel: 'Delete character' }, '🗑');
   private readonly toast = h('div', { className: 'toast', role: 'status' } as Partial<HTMLDivElement>);
 
   constructor(
     private readonly root: HTMLElement,
     private readonly stage: Stage,
     private readonly repo: CharacterRepository,
+    private readonly events: CreatorEvents,
   ) {}
 
   async start(): Promise<void> {
@@ -80,6 +77,12 @@ export class CharacterCreator {
     const active = this.characters.find((c) => c.id === activeId);
     if (active) this.load(active);
     else this.startNew();
+  }
+
+  /** Reopens the creator on an existing character, e.g. when returning from the island. */
+  async edit(character: Character): Promise<void> {
+    this.characters = await this.repo.list();
+    this.load(character);
   }
 
   private render(): void {
@@ -149,14 +152,14 @@ export class CharacterCreator {
     this.characters = await this.repo.list();
     this.editing = saved;
     this.refresh();
-    this.stage.wave();
-    this.showToast(`Welcome to the island, ${saved.name}!`);
+    this.events.onPlay(saved);
   }
 
   private async remove(): Promise<void> {
     if (!this.editing) return;
     if (!confirm(`Delete ${this.editing.name}? This cannot be undone.`)) return;
     await this.repo.remove(this.editing.id);
+    this.events.onDelete(this.editing.id);
     this.characters = await this.repo.list();
     this.showToast(`${this.editing.name} moved away.`);
     this.startNew();
@@ -174,7 +177,7 @@ export class CharacterCreator {
     this.nameInput.value = this.name;
     this.nameError.textContent = '';
     this.deleteButton.hidden = this.editing === null;
-    this.saveButton.textContent = this.editing ? 'Save changes' : 'Move in!';
+    this.saveButton.textContent = this.editing ? 'Save & play ▶' : 'Move in! ▶';
     this.renderResidents();
     this.tabsEl.querySelectorAll('button').forEach((b) => {
       b.setAttribute('aria-selected', String(b.textContent === this.tab));

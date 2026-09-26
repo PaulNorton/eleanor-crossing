@@ -5,6 +5,7 @@ import type { Appearance, Species } from './model';
 const HEAD_CENTER = new THREE.Vector3(0, 1.45, 0);
 const HEAD_RADIUS = 0.55;
 const SHOULDER_Y = 0.88;
+const HIP_Y = 0.4;
 
 const WHITE = '#ffffff';
 const DARK = '#2b2b2b';
@@ -102,6 +103,8 @@ export interface CharacterRig {
   head: THREE.Group;
   leftArm: THREE.Group;
   rightArm: THREE.Group;
+  leftLeg: THREE.Group;
+  rightLeg: THREE.Group;
   eyes: THREE.Object3D[];
   tail: THREE.Object3D | null;
   dispose(): void;
@@ -114,13 +117,18 @@ export function buildCharacter(a: Appearance): CharacterRig {
   const body = new THREE.Group();
   root.add(body);
 
-  // Legs and shoes.
+  // Legs pivot at the hip so they can swing when walking.
+  const legs: THREE.Group[] = [];
   for (const side of [-1, 1]) {
+    const hip = new THREE.Group();
+    hip.position.set(side * 0.13, HIP_Y, 0);
     const leg = f.capsule(0.11, 0.2, a.pantsColor);
-    leg.position.set(side * 0.13, 0.26, 0);
+    leg.position.y = 0.26 - HIP_Y;
     const shoe = f.sphere(0.13, a.shoeColor, [1, 0.6, 1.35]);
-    shoe.position.set(side * 0.13, 0.07, 0.04);
-    body.add(leg, shoe);
+    shoe.position.set(0, 0.07 - HIP_Y, 0.04);
+    hip.add(leg, shoe);
+    body.add(hip);
+    legs.push(hip);
   }
 
   // Torso: shirt over a short pants band.
@@ -174,6 +182,8 @@ export function buildCharacter(a: Appearance): CharacterRig {
     head,
     leftArm: arms[1],
     rightArm: arms[0],
+    leftLeg: legs[1],
+    rightLeg: legs[0],
     eyes,
     tail,
     dispose() {

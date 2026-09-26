@@ -1,9 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { buildCharacter, type CharacterRig } from '../character/build';
+import { CharacterAnimator } from '../character/animator';
+import { buildCharacter } from '../character/build';
 import type { Appearance } from '../character/model';
-
-const WAVE_SECONDS = 1.6;
 
 /** The 3D preview: a small island with the character standing on it. */
 export class Stage {
@@ -12,9 +11,7 @@ export class Stage {
   private readonly camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
   private readonly controls: OrbitControls;
   private readonly timer = new THREE.Timer();
-  private rig: CharacterRig | null = null;
-  private waveUntil = 0;
-  private nextBlink = 2;
+  private animator: CharacterAnimator | null = null;
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -37,20 +34,26 @@ export class Stage {
     this.buildWorld();
     new ResizeObserver(() => this.resize()).observe(container);
     this.resize();
+    this.resume();
+  }
+
+  /** Stops rendering while another view is on screen. */
+  pause(): void {
+    this.renderer.setAnimationLoop(null);
+  }
+
+  resume(): void {
+    this.resize();
     this.renderer.setAnimationLoop((time) => this.frame(time));
   }
 
   setAppearance(appearance: Appearance): void {
-    if (this.rig) {
-      this.scene.remove(this.rig.root);
-      this.rig.dispose();
+    if (this.animator) {
+      this.scene.remove(this.animator.rig.root);
+      this.animator.rig.dispose();
     }
-    this.rig = buildCharacter(appearance);
-    this.scene.add(this.rig.root);
-  }
-
-  wave(): void {
-    this.waveUntil = this.timer.getElapsed() + WAVE_SECONDS;
+    this.animator = new CharacterAnimator(buildCharacter(appearance));
+    this.scene.add(this.animator.rig.root);
   }
 
   private resize(): void {
@@ -130,28 +133,8 @@ export class Stage {
 
   private frame(time: number): void {
     this.timer.update(time);
-    const dt = this.timer.getDelta();
-    const t = this.timer.getElapsed();
     this.controls.update();
-    if (this.rig) this.animate(this.rig, t, dt);
+    this.animator?.update(Math.min(this.timer.getDelta(), 0.1));
     this.renderer.render(this.scene, this.camera);
-  }
-
-  private animate(rig: CharacterRig, t: number, dt: number): void {
-    // Idle: gentle breathing and a slow head sway.
-    rig.body.position.y = Math.abs(Math.sin(t * 2)) * 0.02;
-    rig.head.rotation.z = Math.sin(t * 0.9) * 0.05;
-    rig.head.rotation.y = Math.sin(t * 0.5) * 0.12;
-    if (rig.tail) rig.tail.rotation.y = Math.sin(t * 3) * 0.35;
-
-    const waving = t < this.waveUntil;
-    const target = waving ? 2.6 + Math.sin(t * 14) * 0.35 : 0.25 + Math.sin(t * 2) * 0.04;
-    rig.leftArm.rotation.z += (target - rig.leftArm.rotation.z) * Math.min(1, dt * 10);
-    rig.rightArm.rotation.z = -0.25 - Math.sin(t * 2) * 0.04;
-
-    // Blink every few seconds.
-    if (t > this.nextBlink + 0.15) this.nextBlink = t + 2 + Math.random() * 3;
-    const blink = t > this.nextBlink ? 0.1 : 1;
-    for (const eye of rig.eyes) eye.scale.y = blink;
   }
 }

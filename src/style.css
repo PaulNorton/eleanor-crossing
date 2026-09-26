@@ -296,3 +296,210 @@ footer .danger:hover {
     padding: 16px;
   }
 }
+
+/* ---------- Island ---------- */
+
+[hidden] {
+  display: none !important;
+}
+
+.world {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.world canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.hud {
+  --minimap-size: 128px;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hud button,
+.hud .joystick {
+  pointer-events: auto;
+}
+
+.hud-top-left {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.player-chip,
+.clock {
+  padding: 6px 14px;
+  background: var(--cream);
+  border: 3px solid var(--line);
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.edit-button {
+  background: var(--cream);
+  border-width: 3px;
+}
+
+.hud-top-right {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  width: var(--minimap-size);
+}
+
+.minimap {
+  width: var(--minimap-size);
+  height: var(--minimap-size);
+  border: 3px solid var(--cream);
+  border-radius: 16px;
+  image-rendering: pixelated;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.talk-prompt {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 4px 12px;
+  background: #fff;
+  border: 3px solid var(--leaf);
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dialogue {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  width: min(640px, calc(100% - 32px));
+  transform: translateX(-50%);
+  padding: 26px 24px 18px;
+  background: var(--cream);
+  border: 4px solid var(--line);
+  border-radius: 28px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.dialogue-name {
+  position: absolute;
+  top: -18px;
+  left: 24px;
+  padding: 4px 16px;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 800;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.dialogue-text {
+  margin: 0;
+  min-height: 3em;
+  font-size: 1.15rem;
+  line-height: 1.5;
+}
+
+.dialogue-next {
+  position: absolute;
+  right: 20px;
+  bottom: 8px;
+  color: var(--leaf);
+  animation: bob 0.8s ease-in-out infinite;
+}
+
+@keyframes bob {
+  50% {
+    transform: translateY(3px);
+  }
+}
+
+.controls-hint {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 4px 12px;
+  background: rgba(255, 250, 240, 0.85);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.joystick,
+.action-button {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .controls-hint {
+    display: none;
+  }
+
+  .joystick {
+    position: absolute;
+    left: 24px;
+    bottom: 24px;
+    display: grid;
+    place-items: center;
+    width: 128px;
+    height: 128px;
+    border-radius: 50%;
+    background: rgba(255, 250, 240, 0.45);
+    border: 3px solid rgba(255, 255, 255, 0.8);
+    touch-action: none;
+  }
+
+  .knob {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--cream);
+    border: 3px solid var(--line);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+
+  .action-button {
+    position: absolute;
+    right: 28px;
+    bottom: 40px;
+    display: block;
+    width: 76px;
+    height: 76px;
+    padding: 0;
+    font-size: 1.6rem;
+    font-weight: 800;
+    background: var(--leaf);
+    border: 4px solid var(--leaf-dark);
+    color: #fff;
+  }
+
+  .dialogue {
+    bottom: 180px;
+  }
+}
+
+@media (max-width: 600px) {
+  .hud {
+    --minimap-size: 96px;
+  }
+
+  .edit-button {
+    font-size: 0.85rem;
+  }
+}

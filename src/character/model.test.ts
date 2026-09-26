@@ -3,6 +3,7 @@ import {
   NAME_MAX_LENGTH,
   createCharacter,
   defaultAppearance,
+  newId,
   normalizeAppearance,
   normalizeCharacter,
   randomAppearance,
@@ -57,5 +58,17 @@ describe('normalizeCharacter', () => {
 describe('createCharacter', () => {
   it('throws on an invalid name', () => {
     expect(() => createCharacter('', defaultAppearance())).toThrow();
+  });
+});
+
+describe('newId', () => {
+  it('makes a v4 UUID without crypto.randomUUID', () => {
+    const original = crypto.randomUUID;
+    Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true });
+    try {
+      expect(newId()).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    } finally {
+      Object.defineProperty(crypto, 'randomUUID', { value: original, configurable: true });
+    }
   });
 });

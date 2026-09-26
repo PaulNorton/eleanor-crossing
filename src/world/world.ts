@@ -11,7 +11,7 @@ import { Hud } from './hud';
 import { Input } from './input';
 import { Room } from './interior';
 import { type RoomColors, buildRoom, villagerRoomColors } from './interiorScenery';
-import { type HouseSite, IslandMap, type Point, houseDoor } from './map';
+import { type HouseSite, IslandMap, type Point, atDoorway, houseDoor } from './map';
 import { type Villager, conversation, dayPart } from './npcs';
 import { buildEmptyLot, buildHouse, buildScenery } from './scenery';
 
@@ -475,10 +475,7 @@ export class World {
   /** The house whose front door is right in front of this spot, if any. */
   private doorAt(x: number, z: number): House | null {
     for (const house of this.houses.values()) {
-      const door = houseDoor(house.site);
-      // The house's front wall is half a tile behind the door tile's center.
-      const wallZ = door.z - 0.5;
-      if (Math.abs(x - door.x) < 0.45 && z - wallZ < ACTOR_RADIUS + 0.15) return house;
+      if (atDoorway(house.site, x, z, ACTOR_RADIUS)) return house;
     }
     return null;
   }

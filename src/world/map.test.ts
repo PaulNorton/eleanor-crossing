@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IslandMap, MAP_SIZE, MAX_HOUSES, PLOT_COUNT, Tile, houseDoor, tileCenter, worldToTile } from './map';
+import { IslandMap, MAP_SIZE, MAX_HOUSES, PLOT_COUNT, Tile, atDoorway, houseDoor, tileCenter, worldToTile } from './map';
 import { VILLAGERS } from './npcs';
 
 const RADIUS = 0.28;
@@ -86,6 +86,48 @@ describe('IslandMap', () => {
       expect(map.canStand(door.x, door.z, RADIUS)).toBe(true);
       const { tx, tz } = worldToTile(door.x, door.z);
       expect(reachable.has(map.index(tx, tz)), `door of ${house.owner}`).toBe(true);
+    }
+  });
+});
+
+describe('atDoorway', () => {
+  const sites = [...map.houses, ...map.plots];
+
+  it('is true right in front of the door, where walking stops at the wall', () => {
+    for (const site of sites) {
+      const door = houseDoor(site);
+      // Closest the player can get to the front wall.
+      const z = door.z - 0.5 + RADIUS + 0.01;
+      expect(map.canStand(door.x, z, RADIUS), site.owner).toBe(true);
+      expect(atDoorway(site, door.x, z, RADIUS), site.owner).toBe(true);
+    }
+  });
+
+  it('is false beside the door, behind the house, or anywhere else lined up with it', () => {
+    for (const site of sites) {
+      const door = houseDoor(site);
+      expect(atDoorway(site, door.x + 1, door.z - 0.2, RADIUS), `${site.owner} beside`).toBe(false);
+      expect(atDoorway(site, door.x, door.z - 3.2, RADIUS), `${site.owner} behind`).toBe(false);
+      expect(atDoorway(site, door.x, door.z - 20, RADIUS), `${site.owner} far north`).toBe(false);
+    }
+  });
+
+  it('matches at most one house anywhere a player can stand', () => {
+    for (let tz = 0; tz < MAP_SIZE; tz++) {
+      for (let tx = 0; tx < MAP_SIZE; tx++) {
+        for (const [ox, oz] of [[0.25, 0.25], [0.5, 0.5], [0.75, 0.75]]) {
+          const x = tx - MAP_SIZE / 2 + ox;
+          const z = tz - MAP_SIZE / 2 + oz;
+          if (!map.canStand(x, z, RADIUS)) continue;
+          const hits = sites.filter((s) => atDoorway(s, x, z, RADIUS));
+          expect(hits.length, `(${x}, ${z})`).toBeLessThanOrEqual(1);
+          // A doorway match means the player is within a step of that door.
+          for (const s of hits) {
+            const door = houseDoor(s);
+            expect(Math.hypot(door.x - x, door.z - z), `(${x}, ${z}) → ${s.owner}`).toBeLessThan(1);
+          }
+        }
+      }
     }
   });
 });

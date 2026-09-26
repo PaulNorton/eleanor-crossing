@@ -63,6 +63,15 @@ export function houseDoor(h: HouseSite): Point {
   return tileCenter(h.tx + 1, h.tz + HOUSE_SIZE);
 }
 
+/** Is a body of this radius, at this spot, standing right at the house's front door? */
+export function atDoorway(h: HouseSite, x: number, z: number, radius: number): boolean {
+  const door = houseDoor(h);
+  // The house's front wall is half a tile behind the door tile's center.
+  // The body must be in front of the wall and pressed up against it.
+  const gap = z - (door.z - 0.5);
+  return Math.abs(x - door.x) < 0.45 && gap >= 0 && gap < radius + 0.15;
+}
+
 export class IslandMap {
   readonly tiles = new Uint8Array(MAP_SIZE * MAP_SIZE);
   /** Tiles covered by buildings (houses, fountain). */
